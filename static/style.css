@@ -54,21 +54,6 @@ body {
     mix-blend-mode: plus-lighter;
 }
 
-.shape-1 {
-    top: 20%;
-    left: 10%;
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle,
-            rgba(103, 178, 255, 0.3) 0%,
-            rgba(103, 178, 255, 0.1) 50%,
-            transparent 70%);
-    border-radius: 50%;
-    filter: blur(50px);
-    animation: float 20s infinite alternate;
-    mix-blend-mode: screen;
-}
-
 .shape-2 {
     bottom: 20%;
     right: 10%;
@@ -162,23 +147,55 @@ body::after {
 /* --- Chat Container --- */
 .chat {
     width: 100%;
-    height: 90vh;
-    max-height: 850px;
+    height: 100vh;
     margin: 0;
+    display: flex;
+    align-items: center;
+    /* vertical center */
+    justify-content: center;
+    /* horizontal center */
 }
 
 .card {
-    height: 100%;
+    /* fixed vertical size for the card */
+    height: 85vh;
+    max-height: 85vh;
     border-radius: 30px !important;
-    background: rgba(255, 255, 255, 0.21) !important;
+    /* swap: make the card use the previous hover colour by default */
+    background: rgba(79, 163, 255, 0.25) !important;
     border: 1px solid rgba(255, 255, 255, 0.45);
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    /* use the blue-tinted shadow as the default look (was the hover shadow) */
+    box-shadow: 0 8px 25px rgba(79, 163, 255, 0.2);
+    max-height: 85vh;
+    width: min(980px, 96%);
     position: relative;
     overflow: hidden;
     backdrop-filter: blur(4.7px);
     -webkit-backdrop-filter: blur(4.7px);
+    will-change: transform;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+.card {
+    /* slightly slower so the sheen is visible — still responsive */
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.32s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.32s;
+}
+
+.card:hover {
+    /* reversed: on hover, switch to the original card colour (lighter) */
+    transform: translateY(-2px);
+    background-color: rgba(255, 255, 255, 0.21) !important;
+    /* revert to the original subtle shadow on hover */
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    border-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.card:hover::before {
+    /* disable heavy pseudo-element keyframe animation; use a lightweight ::after transform instead */
+    animation: none !important;
 }
 
 /* Glass shine effect */
@@ -195,15 +212,49 @@ body::after {
     pointer-events: none;
 }
 
-@keyframes glass-shine {
-    0% {
-        transform: translateX(-100%);
-    }
+/* Sheen that matches the send button ::before behavior (left:-100% -> left:100%) */
+.card::after {
+    /* sheen using transform for GPU acceleration
+       smoother gradient stops + subtle blur to remove hard edges */
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* softer multi-stop gradient for gentler edges (wider falloff + lower peak) */
+    background: linear-gradient(120deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.06) 22%,
+            rgba(255, 255, 255, 0.24) 50%,
+            rgba(255, 255, 255, 0.06) 78%,
+            rgba(255, 255, 255, 0) 100%);
+    transform: translateX(-100%);
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s;
+    will-change: transform, opacity;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    /* slightly lower opacity for a subtler effect */
+    opacity: 0.75;
+    backface-visibility: hidden;
+    /* soften the sheen edges more for a softer look */
+    filter: blur(30px);
+    border-radius: 32px;
+}
 
-    20%,
-    100% {
-        transform: translateX(200%);
-    }
+.card:hover::after {
+    transform: translateX(100%);
+    /* softer, lighter-on-hover but not harsh */
+    opacity: 0.85;
+    background: linear-gradient(120deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.10) 25%,
+            rgba(255, 255, 255, 0.38) 50%,
+            rgba(255, 255, 255, 0.10) 75%,
+            rgba(255, 255, 255, 0) 100%);
+    mix-blend-mode: screen;
+    z-index: 2;
+    filter: blur(16px);
 }
 
 /* Animated border gradient */
