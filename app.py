@@ -23,7 +23,7 @@ os.environ['GOOGLE_API_KEY'] = GOOGLE_API_KEY
 embeddings = download_huggingface_embeddings()
 
 index_name = "carebot" 
-# Embed each chunk and upsert the embeddings into your Pinecone index.
+
 vs = PineconeVectorStore.from_existing_index(
     index_name=index_name,
     embedding=embeddings
@@ -31,9 +31,12 @@ vs = PineconeVectorStore.from_existing_index(
 
 retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k":3})
 
+temperature = 0.5
+
+
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",       
-    temperature=0.3,
+    temperature=temperature,
     max_output_tokens=512,
     google_api_key=GOOGLE_API_KEY  
 )

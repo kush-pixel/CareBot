@@ -17,10 +17,12 @@ pc = Pinecone(api_key = PINECONE_API_KEY)
 
 index_name = "carebot"
 
+dimension = 384
+
 if not pc.has_index(index_name):
     pc.create_index(
         name=index_name,
-        dimension=384,
+        dimension=dimension,
         metric = 'cosine',
         spec=ServerlessSpec(
         cloud="aws",
