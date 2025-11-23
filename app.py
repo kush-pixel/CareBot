@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session
 from src.helper import download_huggingface_embeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -16,7 +16,7 @@ from src.prompt import *
 import os
 
 app = Flask(__name__)
-
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 load_dotenv()
 
 PINECONE_API_KEY=os.environ.get('PINECONE_API_KEY')
@@ -104,7 +104,7 @@ prompt = PromptTemplate(
 conv_rag_chain = ConversationalRetrievalChain.from_llm(
     llm=llm,
     retriever=retriever,
-    memory=memory,
+    # memory=memory,
     combine_docs_chain_kwargs={"prompt": prompt},
     return_source_documents=False,
     get_chat_history=lambda h: h
@@ -116,15 +116,56 @@ conv_rag_chain = ConversationalRetrievalChain.from_llm(
 def index():
     return render_template('chat.html')
 
-
 @app.route("/get", methods=["GET", "POST"])
 def chat():
     msg = request.form["msg"]
     print("User:", msg)
-    result = conv_rag_chain.invoke({"question": msg})
+
+    # Get previous chat history from session (string list)
+    history = session.get("chat_history", [])
+
+    # Format history as a simple string (you can customize format later)
+    # e.g., "User: ...\nBot: ...\n..."
+    history_str = ""
+    for turn in history:
+        role, text = turn
+        if role == "user":
+            history_str += f"User: {text}\n"
+        else:
+            history_str += f"Bot: {text}\n"
+
+    # Call the chain with explicit chat_history
+    result = conv_rag_chain.invoke({
+        "question": msg,
+        "chat_history": history_str
+    })
+
     answer = result["answer"]
     print("Response:", answer)
+
+    # Append this turn to the session history
+    history.append(("user", msg))
+    history.append(("bot", answer))
+    session["chat_history"] = history
+
     return answer
+
+
+# @app.route("/get", methods=["GET", "POST"])
+# def chat():
+#     msg = request.form["msg"]
+#     print("User:", msg)
+#     result = conv_rag_chain.invoke({"question": msg})
+#     answer = result["answer"]
+#     print("Response:", answer)
+#     return answer
+
+@app.route("/clear", methods=["POST"])
+def clear_chat():
+    # Remove chat history from session
+    session.pop("chat_history", None)
+    return jsonify({"status": "ok"})
+
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port= 8080, debug= True)
