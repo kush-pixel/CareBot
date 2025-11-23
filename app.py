@@ -7,6 +7,11 @@ from langchain.prompts import PromptTemplate
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import ConversationalRetrievalChain
 from dotenv import load_dotenv
+from typing import List
+from pydantic import Field
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.documents import Document
+from sentence_transformers import CrossEncoder
 from src.prompt import *
 import os
 
@@ -29,7 +34,49 @@ vs = PineconeVectorStore.from_existing_index(
     embedding=embeddings
 )
 
-retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k":3})
+class CrossEncoderRerankRetriever(BaseRetriever):
+    base_retriever: BaseRetriever = Field(...)     
+    model_name: str = Field(default="cross-encoder/ms-marco-MiniLM-L-6-v2")
+    top_k: int = Field(default=4)
+
+    
+    cross_encoder: CrossEncoder = Field(default=None, exclude=True)
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        
+        self.cross_encoder = CrossEncoder(self.model_name)
+
+    def _get_relevant_documents(self, query: str, *, run_manager=None) -> List[Document]:
+      
+        docs = self.base_retriever.get_relevant_documents(query)
+        if not docs:
+            return []
+
+       
+        pairs = [[query, doc.page_content] for doc in docs]
+        scores = self.cross_encoder.predict(pairs)
+
+        
+        ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
+        top_docs = [doc for _, doc in ranked[: self.top_k]]
+        return top_docs
+
+    async def _aget_relevant_documents(self, query: str, *, run_manager=None) -> List[Document]:
+        return self._get_relevant_documents(query, run_manager=run_manager)
+
+# retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k":3})
+
+base_retriever = vs.as_retriever(
+    search_kwargs={"k": 10}  
+)
+
+
+retriever = CrossEncoderRerankRetriever(
+    base_retriever=base_retriever,
+    model_name="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    top_k=4  
+)
 
 temperature = 0.5
 
