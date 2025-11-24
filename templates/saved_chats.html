@@ -1,0 +1,128 @@
+<link href="//maxcdn.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
+<script src="//maxcdn.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Saved Chats - Medical Chatbot</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+        integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css"
+        integrity="sha384-B4dIYHKNBt8Bc12p+WXckhzcICo0wtJAoU8YZTY5qE0Id1GSseTk6S+L3BlXeVIU" crossorigin="anonymous">
+
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css')}}" />
+</head>
+
+<body>
+    <!-- Background shapes -->
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+    <div class="shape shape-3"></div>
+
+    <div class="container-fluid h-100">
+        <div class="row justify-content-center h-100">
+            <div class="col-md-8 col-xl-6 chat">
+                <div class="card">
+
+                    <!-- Header -->
+                    <div class="card-header msg_head">
+                        <div class="d-flex bd-highlight w-100">
+                            <div class="img_cont">
+                                <img src="https://cdn-icons-png.flaticon.com/512/387/387569.png"
+                                    class="rounded-circle user_img">
+                                <span class="online_icon"></span>
+                            </div>
+                            <div class="user_info">
+                                <span>Saved Chats</span>
+                                <p>Browse and continue your saved conversations.</p>
+                            </div>
+
+                            <div class="ml-auto d-flex align-items-center">
+                                <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light mr-2">
+                                    Back to Chat
+                                </a>
+                                <button id="clear-saved-chats" type="button" class="btn btn-sm btn-outline-light">
+                                    Clear Saved Chats
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Saved chats list -->
+                    <div class="card-body msg_card_body">
+                        {% if saved_chats and saved_chats|length > 0 %}
+                        {% for chat in saved_chats %}
+                        <!-- Whole row clickable via JS -->
+                        <div class="mb-3 p-3 saved-chat-row" data-index="{{ loop.index0 }}"
+                            style="background: rgba(34,38,46,0.6); border-radius: 12px;">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="saved-chat-name" style="margin:0; color:#4fa3ff; font-weight:600;">
+                                    {{ chat.name }}
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-chat-btn"
+                                    data-index="{{ loop.index0 }}">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <p style="color:#ccc;">You don't have any saved chats yet.</p>
+                        {% endif %}
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // Clear ALL saved chats
+            $("#clear-saved-chats").on("click", function () {
+                if (!confirm("Are you sure you want to clear ALL saved chats? This cannot be undone.")) {
+                    return;
+                }
+
+                $.ajax({
+                    type: "POST",
+                    url: "/clear_saved_chats"
+                }).done(function (res) {
+                    window.location.reload();
+                });
+            });
+
+            // Entire row is clickable -> load that chat
+            $(".saved-chat-row").on("click", function () {
+                const idx = $(this).data("index");
+                window.location.href = "/load_chat/" + idx;
+            });
+
+            // Delete a single saved chat (without triggering row click)
+            $(".delete-chat-btn").on("click", function (e) {
+                e.stopPropagation(); // prevent row click
+                const idx = $(this).data("index");
+
+                if (!confirm("Delete this saved chat? This cannot be undone.")) {
+                    return;
+                }
+
+                $.ajax({
+                    type: "POST",
+                    url: "/delete_chat/" + idx
+                }).done(function (res) {
+                    if (res.status === "ok") {
+                        window.location.reload();
+                    } else {
+                        alert(res.message || "Could not delete this chat.");
+                    }
+                });
+            });
+        });
+    </script>
+
+</body>
+
+</html>

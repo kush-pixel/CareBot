@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, session
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from src.helper import download_huggingface_embeddings
 from langchain_pinecone import PineconeVectorStore
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -114,27 +114,60 @@ conv_rag_chain = ConversationalRetrievalChain.from_llm(
 
 @app.route("/")
 def index():
-    return render_template('chat.html')
+    history = session.get("chat_history", [])
+    return render_template('chat.html', chat_history = history)
+
+# @app.route("/get", methods=["GET", "POST"])
+# def chat():
+#     msg = request.form["msg"]
+#     print("User:", msg)
+
+#     # Get previous chat history from session (string list)
+#     history = session.get("chat_history", [])
+
+#     # Format history as a simple string (you can customize format later)
+#     # e.g., "User: ...\nBot: ...\n..."
+#     history_str = ""
+#     for turn in history:
+#         role, text = turn
+#         if role == "user":
+#             history_str += f"User: {text}\n"
+#         else:
+#             history_str += f"Bot: {text}\n"
+
+#     # Call the chain with explicit chat_history
+#     result = conv_rag_chain.invoke({
+#         "question": msg,
+#         "chat_history": history_str
+#     })
+
+#     answer = result["answer"]
+#     print("Response:", answer)
+
+#     # Append this turn to the session history
+#     history.append(("user", msg))
+#     history.append(("bot", answer))
+#     session["chat_history"] = history
+
+#     return answer
 
 @app.route("/get", methods=["GET", "POST"])
 def chat():
     msg = request.form["msg"]
     print("User:", msg)
 
-    # Get previous chat history from session (string list)
+    # Get previous chat history from session
     history = session.get("chat_history", [])
 
-    # Format history as a simple string (you can customize format later)
-    # e.g., "User: ...\nBot: ...\n..."
+    # Format for the prompt
     history_str = ""
-    for turn in history:
-        role, text = turn
+    for role, text in history:
         if role == "user":
             history_str += f"User: {text}\n"
         else:
-            history_str += f"Bot: {text}\n"
+            history_str += f"CareBot: {text}\n"
 
-    # Call the chain with explicit chat_history
+    # Call the chain
     result = conv_rag_chain.invoke({
         "question": msg,
         "chat_history": history_str
@@ -143,7 +176,7 @@ def chat():
     answer = result["answer"]
     print("Response:", answer)
 
-    # Append this turn to the session history
+    # Update session chat history
     history.append(("user", msg))
     history.append(("bot", answer))
     session["chat_history"] = history
@@ -151,19 +184,187 @@ def chat():
     return answer
 
 
-# @app.route("/get", methods=["GET", "POST"])
-# def chat():
-#     msg = request.form["msg"]
-#     print("User:", msg)
-#     result = conv_rag_chain.invoke({"question": msg})
-#     answer = result["answer"]
-#     print("Response:", answer)
-#     return answer
 
 @app.route("/clear", methods=["POST"])
 def clear_chat():
     # Remove chat history from session
     session.pop("chat_history", None)
+    session.pop("current_chat_index", None)
+    return jsonify({"status": "ok"})
+
+
+# @app.route("/save_chat", methods=["POST"])
+# def save_chat():
+#     # Name from frontend (popup)
+#     data = request.get_json(silent=True) or {}
+#     name = (data.get("name") or "").strip()
+
+#     history = session.get("chat_history", [])
+#     if not history:
+#         return jsonify({"status": "empty", "message": "No chat history to save."})
+
+#     # Format as plain text transcript
+#     lines = []
+#     for role, text in history:
+#         role_label = "User" if role == "user" else "CareBot"
+#         lines.append(f"{role_label}: {text}")
+#     content = "\n".join(lines)
+
+#     saved_chats = session.get("saved_chats", [])
+
+#     if not name:
+#         name = f"Chat {len(saved_chats) + 1}"
+
+#     saved_chats.append({
+#         "name": name,
+#         "content": content
+#     })
+#     session["saved_chats"] = saved_chats
+
+#     # 🔹 After saving, clear current chat history so next chat is fresh
+#     session.pop("chat_history", None)
+
+#     return jsonify({"status": "ok", "message": "Chat saved successfully.", "name": name})
+
+@app.route("/save_chat", methods=["POST"])
+def save_chat():
+    # Name from frontend (popup)
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+
+    history = session.get("chat_history", [])
+    if not history:
+        return jsonify({"status": "empty", "message": "No chat history to save."})
+
+    # Format as plain text transcript
+    lines = []
+    for role, text in history:
+        role_label = "User" if role == "user" else "CareBot"
+        lines.append(f"{role_label}: {text}")
+    content = "\n".join(lines)
+
+    saved_chats = session.get("saved_chats", [])
+    current_index = session.get("current_chat_index", None)
+
+    # 🔹 If we are editing an existing saved chat, update it
+    if isinstance(current_index, int) and 0 <= current_index < len(saved_chats):
+        # Update name only if user provided a new one
+        if name:
+            saved_chats[current_index]["name"] = name
+        # Always update content to latest conversation
+        saved_chats[current_index]["content"] = content
+        updated_name = saved_chats[current_index]["name"]
+    else:
+        # 🔹 New chat: append
+        if not name:
+            name = f"Chat {len(saved_chats) + 1}"
+        saved_chats.append({
+            "name": name,
+            "content": content
+        })
+        current_index = len(saved_chats) - 1
+        updated_name = name
+
+    session["saved_chats"] = saved_chats
+
+    # After saving, clear current chat + clear current_chat_index
+    session.pop("chat_history", None)
+    session.pop("current_chat_index", None)
+
+    return jsonify({
+        "status": "ok",
+        "message": "Chat saved successfully.",
+        "name": updated_name,
+        "index": current_index
+    })
+
+
+# @app.route("/load_chat/<int:chat_index>", methods=["GET"])
+# def load_chat(chat_index):
+#     saved_chats = session.get("saved_chats", [])
+#     if 0 <= chat_index < len(saved_chats):
+#         chat = saved_chats[chat_index]
+#         content = chat.get("content", "")
+
+#         # Reconstruct chat_history from the saved text
+#         history = []
+#         for line in content.splitlines():
+#             line = line.strip()
+#             if line.startswith("User: "):
+#                 text = line[len("User: "):]
+#                 history.append(("user", text))
+#             elif line.startswith("CareBot: "):
+#                 text = line[len("CareBot: "):]
+#                 history.append(("bot", text))
+
+#         session["chat_history"] = history
+
+#     # Redirect back to main chat, where history will be rendered
+#     return redirect(url_for("index"))
+
+@app.route("/load_chat/<int:chat_index>", methods=["GET"])
+def load_chat(chat_index):
+    saved_chats = session.get("saved_chats", [])
+    if 0 <= chat_index < len(saved_chats):
+        chat = saved_chats[chat_index]
+        content = chat.get("content", "")
+
+        # Reconstruct chat_history from the saved text
+        history = []
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("User: "):
+                text = line[len("User: "):]
+                history.append(("user", text))
+            elif line.startswith("CareBot: "):
+                text = line[len("CareBot: "):]
+                history.append(("bot", text))
+
+        session["chat_history"] = history
+        # 🔹 Remember which saved chat is currently being edited
+        session["current_chat_index"] = chat_index
+
+    return redirect(url_for("index"))
+
+
+# @app.route("/delete_chat/<int:chat_index>", methods=["POST"])
+# def delete_chat(chat_index):
+#     saved_chats = session.get("saved_chats", [])
+
+#     if 0 <= chat_index < len(saved_chats):
+#         # Remove the selected chat
+#         del saved_chats[chat_index]
+#         session["saved_chats"] = saved_chats
+#         return jsonify({"status": "ok"})
+
+#     return jsonify({"status": "error", "message": "Invalid chat index."}), 400
+
+@app.route("/delete_chat/<int:chat_index>", methods=["POST"])
+def delete_chat(chat_index):
+    saved_chats = session.get("saved_chats", [])
+
+    if 0 <= chat_index < len(saved_chats):
+        del saved_chats[chat_index]
+        session["saved_chats"] = saved_chats
+        # If we were editing some chat, reset that state
+        session.pop("current_chat_index", None)
+        return jsonify({"status": "ok"})
+
+    return jsonify({"status": "error", "message": "Invalid chat index."}), 400
+
+
+@app.route("/saved_chats", methods=["GET"])
+def saved_chats():
+    chats = session.get("saved_chats", [])
+    return render_template("saved_chats.html", saved_chats=chats)
+
+@app.route("/clear_saved_chats", methods=["POST"])
+def clear_saved_chats():
+    # Remove all saved chats
+    session.pop("saved_chats", None)
+    # Also clear current chat history memory
+    session.pop("chat_history", None)
+    session.pop("current_chat_index", None)
     return jsonify({"status": "ok"})
 
 
